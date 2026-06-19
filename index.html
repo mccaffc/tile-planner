@@ -210,19 +210,6 @@
   </main>
 </div>
 
-<!-- shared SVG defs -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <linearGradient id="flute" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0"   stop-color="#867c67"/>
-    <stop offset="0.14" stop-color="#a89d86"/>
-    <stop offset="0.34" stop-color="#cfc6b2"/>
-    <stop offset="0.5"  stop-color="#ded6c3"/>
-    <stop offset="0.66" stop-color="#cfc6b2"/>
-    <stop offset="0.86" stop-color="#a89d86"/>
-    <stop offset="1"    stop-color="#867c67"/>
-  </linearGradient>
-</defs></svg>
-
 <script>
 /* ---------- tile artwork ---------- */
 // deterministic pebble field
@@ -240,46 +227,62 @@ function pebble(){
 /* ---------- finishes ---------- */
 const PALETTES = {
   silver:{
-    flute:[[0,'#62676b'],[0.14,'#8b9094'],[0.34,'#c4c9cd'],[0.5,'#e6eaed'],[0.66,'#c4c9cd'],[0.86,'#8b9094'],[1,'#62676b']],
-    groove:'#7e8388', pebbleBase:'#93999d', dots:['#bcc1c5','#787d82','#a3a8ac','#868b90'],
-    arcLight:'#d2d7db', arcDark:'#6b7075', chip:'#c4c9cd'
+    field:'#c6cbcf', ridge:'#e4e8eb', groove:'#5e6368',
+    pebbleBase:'#aab0b4', dots:['#bcc1c5','#878d92','#a3a8ac','#969b9f'], chip:'#c4c9cd'
   },
   black:{
-    flute:[[0,'#141516'],[0.14,'#2f3133'],[0.34,'#54585b'],[0.5,'#6d7074'],[0.66,'#54585b'],[0.86,'#2f3133'],[1,'#141516']],
-    groove:'#1f2123', pebbleBase:'#2b2d2f', dots:['#46494c','#1d1f21','#383b3d','#242628'],
-    arcLight:'#5c6064', arcDark:'#131415', chip:'#3a3d3f'
+    field:'#3b3e40', ridge:'#62666a', groove:'#101113',
+    pebbleBase:'#303234', dots:['#4a4d50','#202224','#3a3d3f','#2a2c2e'], chip:'#3a3d3f'
   },
   copper:{
-    flute:[[0,'#4f2c14'],[0.14,'#884c25'],[0.34,'#c07d44'],[0.5,'#ecaa6b'],[0.66,'#c07d44'],[0.86,'#884c25'],[1,'#4f2c14']],
-    groove:'#6f3e1f', pebbleBase:'#94572f', dots:['#c4884f','#6f3d1e','#a8693a','#5a3115'],
-    arcLight:'#dd9c61', arcDark:'#5d3318', chip:'#c07d44'
+    field:'#bd7a42', ridge:'#e6a96d', groove:'#4f2c14',
+    pebbleBase:'#a5683a', dots:['#cc8c52','#73401f','#b3743f','#5e3517'], chip:'#c07d44'
   }
 };
 function P(){ return PALETTES[state.finish] || PALETTES.silver; }
-function applyFlute(){
-  document.getElementById('flute').innerHTML =
-    P().flute.map(([o,c])=>`<stop offset="${o}" stop-color="${c}"/>`).join('');
-}
-const FLUTES = (n=8)=>{const w=100/n;let s='';for(let i=0;i<n;i++)s+=`<rect x="${(i*w).toFixed(2)}" y="-30" width="${w.toFixed(2)}" height="160" fill="url(#flute)"/>`;return s;}
+
+/* Unified line system (generalized Truchet): every tile presents the SAME
+   evenly-spaced crossing points on its edges, so straight flutes, corner
+   arcs and diagonals all line up at tile seams and flow into one another
+   exactly like the real Clodagh tiles. N channels per tile, ridge centres
+   at the half-step offsets (symmetric about centre, so all 4 rotations
+   line up too). */
+const N=8, S=100/N;                                   // 8 flutes, 12.5 apart
+const OFF = Array.from({length:N},(_,i)=>+((i+0.5)*S).toFixed(3)); // 6.25 … 93.75
+const RIDGE_W=5.6, GROOVE_W=1.3;
 
 function svg(inner){return `<svg class="tilesvg" viewBox="0 0 100 100" preserveAspectRatio="none">${inner}</svg>`;}
+function field(){return `<rect x="-3" y="-3" width="106" height="106" fill="${P().field}"/>`;}
+
+// straight: parallel flutes spanning edge-to-edge — neighbours continue the lines
+function vlines(){
+  let g='';
+  for(let x=0;x<=100.001;x+=S) g+=`<line x1="${x}" y1="-3" x2="${x}" y2="103" stroke="${P().groove}" stroke-width="${GROOVE_W}"/>`;
+  for(const x of OFF)          g+=`<line x1="${x}" y1="-3" x2="${x}" y2="103" stroke="${P().ridge}" stroke-width="${RIDGE_W}"/>`;
+  return g;
+}
+// curved: concentric quarter-arcs centred on a corner; radii = the same offsets,
+// so an arc crosses each near edge where a flute would — 4 tiles meet as full circles
+function arcs(){
+  let g='';
+  for(let r=0;r<=151;r+=S)  g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().groove}" stroke-width="${GROOVE_W}"/>`;
+  for(let i=0;i<12;i++){const r=((i+0.5)*S).toFixed(3); g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().ridge}" stroke-width="${RIDGE_W}"/>`;}
+  return g;
+}
+// angled: 45° lines that cross every edge at the same offsets — flow into flutes and arcs alike
+function diag(){
+  const seg=(c,col,w)=>`<line x1="${(c+6).toFixed(2)}" y1="-6" x2="-6" y2="${(c+6).toFixed(2)}" stroke="${col}" stroke-width="${w}"/>`;
+  let g='';
+  for(let i=0;i<=16;i++) g+=seg(i*S,P().groove,GROOVE_W);
+  for(let i=0;i<16;i++)  g+=seg((i+0.5)*S,P().ridge,RIDGE_W);
+  return g;
+}
 
 const ART = {
-  straight: ()=> svg(`<rect width="100" height="100" fill="${P().groove}"/>${FLUTES(8)}`),
-  angled:   ()=> svg(`<rect width="100" height="100" fill="${P().groove}"/>
-      <g transform="rotate(45 50 50)">${FLUTES(11)}</g>`),
-  curved:   ()=> {
-      let arcs='';
-      for(let r=30;r<=152;r+=9){
-        arcs+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().arcLight}" stroke-width="4.2"/>`;
-        arcs+=`<circle cx="0" cy="0" r="${r-4.5}" fill="none" stroke="${P().arcDark}" stroke-width="1.4"/>`;
-      }
-      return svg(`<rect width="100" height="100" fill="${P().groove}"/>
-        <g>${arcs}</g>
-        <clipPath id="corner"><path d="M0 0 H30 A30 30 0 0 1 0 30 Z"/></clipPath>
-        <g clip-path="url(#corner)"><rect width="40" height="40" fill="${P().pebbleBase}"/>${pebble()}</g>`);
-    },
-  filler:   ()=> svg(`<rect width="100" height="100" fill="${P().pebbleBase}"/>${pebble()}`),
+  straight: ()=> svg(field()+vlines()),
+  curved:   ()=> svg(field()+arcs()),
+  angled:   ()=> svg(field()+diag()),
+  filler:   ()=> svg(`<rect x="-3" y="-3" width="106" height="106" fill="${P().pebbleBase}"/>${pebble()}`),
 };
 const TYPES = [
   {id:'straight', name:'Straight'},
@@ -374,7 +377,7 @@ function selectTool(tool){
   updateRotPrev();
 }
 function setFinish(f){
-  state.finish=f; applyFlute();
+  state.finish=f;
   document.querySelectorAll('#finish button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
   buildPalette(); selectTool(state.tool); render(); save();
 }
