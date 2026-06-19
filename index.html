@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Planner</title>
+<style>
+  :root{
+    --bg:#f3f1ec;
+    --panel:#ffffff;
+    --ink:#2b2722;
+    --muted:#7c756a;
+    --line:#e3ddd2;
+    --accent:#9a6a3a;
+    --accent-soft:#f0e3d6;
+    --grid-line:#d8d1c4;
+    --space-line:#9a6a3a;
+    --shadow:0 1px 2px rgba(40,34,26,.06),0 6px 18px rgba(40,34,26,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  }
+  header{
+    display:flex;align-items:baseline;gap:14px;
+    padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);
+    flex:0 0 auto;
+  }
+  header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em}
+  header .sub{color:var(--muted);font-size:12.5px}
+  .layout{display:flex;flex:1 1 auto;min-height:0}
+
+  /* ---- Sidebar ---- */
+  aside{
+    flex:0 0 252px;border-right:1px solid var(--line);background:var(--panel);
+    padding:18px 16px;overflow-y:auto;
+  }
+  .group{margin-bottom:22px}
+  .group h2{
+    font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);margin:0 0 10px;
+  }
+  .field{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .field label{color:var(--muted);font-size:12.5px}
+  .field input[type=number]{
+    width:74px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;
+    font:inherit;text-align:right;background:#fbfaf7;
+  }
+  .field input:focus{outline:none;border-color:var(--accent);background:#fff}
+
+  .palette{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .swatch{
+    border:1.5px solid var(--line);border-radius:10px;padding:7px;cursor:pointer;
+    background:#fbfaf7;transition:border-color .12s,box-shadow .12s,transform .06s;
+    display:flex;flex-direction:column;gap:6px;align-items:center;
+  }
+  .swatch:hover{border-color:#c8beac}
+  .swatch:active{transform:scale(.97)}
+  .swatch.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .swatch .thumb{width:100%;aspect-ratio:1;border-radius:5px;overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
+  .swatch .lbl{font-size:11.5px;color:var(--ink);font-weight:500;text-align:center}
+  .swatch.erase .thumb{display:flex;align-items:center;justify-content:center;
+    background:repeating-linear-gradient(45deg,#f4ede3 0 6px,#fff 6px 12px);color:var(--muted);font-size:18px}
+
+  .rotrow{display:flex;align-items:center;gap:10px;margin-top:6px}
+  .rotprev{width:46px;height:46px;border-radius:7px;overflow:hidden;flex:0 0 auto;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);transition:transform .15s}
+  .btn{
+    font:inherit;font-size:12.5px;padding:7px 11px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;cursor:pointer;color:var(--ink);
+  }
+  .btn:hover{border-color:#c8beac;background:#fbfaf7}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#86592f}
+  .btn.block{width:100%;text-align:center}
+  .btnrow{display:flex;gap:8px}
+
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.55}
+  .hint kbd{font:inherit;font-size:10.5px;background:#f1ece3;border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+  .counts{font-size:12px;color:var(--muted)}
+  .counts div{display:flex;justify-content:space-between;padding:2px 0}
+  .counts b{color:var(--ink);font-weight:600}
+
+  /* ---- Canvas ---- */
+  main{flex:1 1 auto;min-width:0;overflow:auto;padding:28px;display:flex;justify-content:center}
+  .stage{position:relative}
+  .gridwrap{
+    display:grid;background:var(--panel);border-radius:4px;
+    box-shadow:var(--shadow);
+  }
+  .cell{
+    position:relative;background:#fff;cursor:pointer;
+    box-shadow:inset 0 0 0 .5px var(--grid-line);
+  }
+  .cell.out{background:#faf8f4;opacity:.4}
+  .cell:hover{box-shadow:inset 0 0 0 1px var(--accent)}
+  .tile{position:absolute;inset:0;transition:transform .14s ease}
+  .tile svg{display:block;width:100%;height:100%}
+  .tile::after{content:"";position:absolute;inset:0;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.25)}
+  .spacebox{
+    position:absolute;left:0;top:0;pointer-events:none;
+    border:2px solid var(--space-line);border-radius:2px;
+    box-shadow:0 0 0 1px rgba(255,255,255,.5);
+  }
+  .dim{position:absolute;left:8px;background:var(--bg);padding:0 6px;color:var(--accent);
+    font-size:11px;font-weight:600;pointer-events:none}
+  .tilesvg{width:100%;height:100%}
+  @media print{
+    aside,header{display:none}
+    main{overflow:visible;padding:0}
+    body{height:auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tile Planner</h1>
+  <span class="sub">24″ tiles · click to place, click again to rotate</span>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="group">
+      <h2>Space</h2>
+      <div class="field"><label>Width (in)</label><input id="w" type="number" min="1" step="1" value="144"></div>
+      <div class="field"><label>Height (in)</label><input id="h" type="number" min="1" step="1" value="423"></div>
+      <div class="field"><label>Tile size (in)</label><input id="t" type="number" min="1" step="1" value="24"></div>
+    </div>
+
+    <div class="group">
+      <h2>Tiles</h2>
+      <div class="palette" id="palette"></div>
+      <div class="rotrow">
+        <div class="rotprev" id="rotprev"></div>
+        <div>
+          <button class="btn" id="rotbtn">Rotate ↻</button>
+          <div class="hint" style="margin-top:4px">New tiles · <kbd>R</kbd></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>View</h2>
+      <div class="field"><label>Zoom</label><input id="zoom" type="range" min="28" max="96" value="58" style="width:120px"></div>
+      <div class="btnrow">
+        <button class="btn block" id="clear">Clear</button>
+        <button class="btn block" id="print">Print</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Counts</h2>
+      <div class="counts" id="counts"></div>
+    </div>
+
+    <div class="group">
+      <h2>Tips</h2>
+      <div class="hint">
+        <kbd>1</kbd>–<kbd>4</kbd> pick tile · <kbd>E</kbd> erase · <kbd>R</kbd> rotate.<br>
+        Drag to paint a run. Click a placed tile of the same type to spin it 90°. Right-click erases.
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="stage" id="stage">
+      <div class="gridwrap" id="grid"></div>
+      <div class="spacebox" id="spacebox"></div>
+      <div class="dim" id="dimW"></div>
+      <div class="dim" id="dimH"></div>
+    </div>
+  </main>
+</div>
+
+<!-- shared SVG defs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="flute" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0"   stop-color="#867c67"/>
+    <stop offset="0.14" stop-color="#a89d86"/>
+    <stop offset="0.34" stop-color="#cfc6b2"/>
+    <stop offset="0.5"  stop-color="#ded6c3"/>
+    <stop offset="0.66" stop-color="#cfc6b2"/>
+    <stop offset="0.86" stop-color="#a89d86"/>
+    <stop offset="1"    stop-color="#867c67"/>
+  </linearGradient>
+</defs></svg>
+
+<script>
+/* ---------- tile artwork ---------- */
+// deterministic pebble field
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const PRNG = mulberry32(20260618);
+const DOTS = Array.from({length:78},()=>({
+  x:PRNG()*100, y:PRNG()*100, r:1.3+PRNG()*1.5,
+  c:['#c6bca5','#8e856f','#b3a88f','#9b9079'][Math.floor(PRNG()*4)]
+}));
+function pebble(){
+  return DOTS.map(d=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${d.r.toFixed(2)}" fill="${d.c}"/>`).join('');
+}
+const FLUTES = (n=8)=>{const w=100/n;let s='';for(let i=0;i<n;i++)s+=`<rect x="${(i*w).toFixed(2)}" y="-30" width="${w.toFixed(2)}" height="160" fill="url(#flute)"/>`;return s;}
+
+function svg(inner){return `<svg class="tilesvg" viewBox="0 0 100 100" preserveAspectRatio="none">${inner}</svg>`;}
+
+const ART = {
+  straight: ()=> svg(`<rect width="100" height="100" fill="#9a907a"/>${FLUTES(8)}`),
+  angled:   ()=> svg(`<rect width="100" height="100" fill="#9a907a"/>
+      <g transform="rotate(45 50 50)">${FLUTES(11)}</g>`),
+  curved:   ()=> {
+      let arcs='';
+      for(let r=30;r<=152;r+=9){
+        arcs+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="#d4cbb7" stroke-width="4.2"/>`;
+        arcs+=`<circle cx="0" cy="0" r="${r-4.5}" fill="none" stroke="#8b8068" stroke-width="1.4"/>`;
+      }
+      return svg(`<rect width="100" height="100" fill="#9a907a"/>
+        <clipPath id="cap${Math.floor(PRNG()*1e6)}"><rect width="100" height="100"/></clipPath>
+        <g>${arcs}</g>
+        <clipPath id="corner"><path d="M0 0 H30 A30 30 0 0 1 0 30 Z"/></clipPath>
+        <g clip-path="url(#corner)"><rect width="40" height="40" fill="#ada389"/>${pebble()}</g>`);
+    },
+  filler:   ()=> svg(`<rect width="100" height="100" fill="#ada389"/>${pebble()}`),
+};
+const TYPES = [
+  {id:'straight', name:'Straight'},
+  {id:'curved',   name:'Curved'},
+  {id:'angled',   name:'Angled'},
+  {id:'filler',   name:'Filler'},
+];
+
+/* ---------- state ---------- */
+const LS='tile-planner-v1';
+const state = { tool:'straight', rot:0, cell:58, w:144, h:423, t:24, grid:[] };
+let cols=0, rows=0;
+
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(LS));if(s)Object.assign(state,s);}catch(e){}
+}
+function save(){
+  localStorage.setItem(LS, JSON.stringify(state));
+}
+
+/* ---------- grid sizing ---------- */
+function resize(){
+  cols = Math.max(1, Math.ceil(state.w/state.t));
+  rows = Math.max(1, Math.ceil(state.h/state.t));
+  // reshape grid preserving existing
+  const g=[];
+  for(let r=0;r<rows;r++){g[r]=[];for(let c=0;c<cols;c++){g[r][c]=(state.grid[r]&&state.grid[r][c])||null;}}
+  state.grid=g;
+}
+
+/* ---------- render ---------- */
+const gridEl=document.getElementById('grid');
+function render(){
+  const px=state.cell;
+  gridEl.style.gridTemplateColumns=`repeat(${cols},${px}px)`;
+  gridEl.style.gridTemplateRows=`repeat(${rows},${px}px)`;
+  let html='';
+  const scale=px/state.t; // px per inch
+  const spW=state.w*scale, spH=state.h*scale;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const cellX=c*px, cellY=r*px;
+    const out = (cellX>=spW-0.5)||(cellY>=spH-0.5);
+    html+=`<div class="cell${out?' out':''}" data-r="${r}" data-c="${c}">${tileHTML(state.grid[r][c])}</div>`;
+  }
+  gridEl.innerHTML=html;
+
+  // space outline
+  const box=document.getElementById('spacebox');
+  box.style.width=spW+'px'; box.style.height=spH+'px';
+  const dw=document.getElementById('dimW'), dh=document.getElementById('dimH');
+  dw.textContent=state.w+'″'; dw.style.top=(spH+6)+'px'; dw.style.left=(spW/2-14)+'px';
+  dh.textContent=state.h+'″'; dh.style.top=(spH/2-9)+'px'; dh.style.left=(spW+8)+'px';
+  updateCounts();
+}
+function tileHTML(t){
+  if(!t)return '';
+  return `<div class="tile" style="transform:rotate(${t.rot}deg)">${ART[t.type]()}</div>`;
+}
+function updateCell(r,c){
+  const el=gridEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+  if(el)el.innerHTML=tileHTML(state.grid[r][c]);
+}
+
+function updateCounts(){
+  const ct={straight:0,curved:0,angled:0,filler:0};
+  let total=0;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const t=state.grid[r][c];if(t){ct[t.type]++;total++;}}
+  const remW=state.w-Math.floor(state.w/state.t)*state.t;
+  const remH=state.h-Math.floor(state.h/state.t)*state.t;
+  let h='';
+  TYPES.forEach(t=>h+=`<div><span>${t.name}</span><b>${ct[t.id]}</b></div>`);
+  h+=`<div style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span>Placed</span><b>${total}</b></div>`;
+  h+=`<div><span>Grid</span><b>${cols}×${rows}</b></div>`;
+  if(remW||remH)h+=`<div><span>Edge cut</span><b>${remW?remW+'″ w':''}${remW&&remH?', ':''}${remH?remH+'″ h':''}</b></div>`;
+  document.getElementById('counts').innerHTML=h;
+}
+
+/* ---------- palette ---------- */
+function buildPalette(){
+  const p=document.getElementById('palette');
+  let h='';
+  TYPES.forEach((t,i)=>{
+    h+=`<div class="swatch" data-tool="${t.id}"><div class="thumb">${ART[t.id]()}</div><div class="lbl">${t.name}</div></div>`;
+  });
+  h+=`<div class="swatch erase" data-tool="erase"><div class="thumb">⌫</div><div class="lbl">Erase</div></div>`;
+  p.innerHTML=h;
+  p.querySelectorAll('.swatch').forEach(s=>s.onclick=()=>selectTool(s.dataset.tool));
+}
+function selectTool(tool){
+  state.tool=tool; save();
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('sel',s.dataset.tool===tool));
+  updateRotPrev();
+}
+function updateRotPrev(){
+  const el=document.getElementById('rotprev');
+  if(state.tool==='erase'){el.innerHTML='';el.style.background='repeating-linear-gradient(45deg,#f4ede3 0 6px,#fff 6px 12px)';return;}
+  el.style.background='';
+  el.innerHTML=`<div style="width:100%;height:100%;transform:rotate(${state.rot}deg)">${ART[state.tool]()}</div>`;
+}
+
+/* ---------- painting ---------- */
+let dragging=false, suppress=false, last=null;
+function paint(r,c,click){
+  if(r<0||c<0||r>=rows||c>=cols)return;
+  if(state.tool==='erase'){
+    if(state.grid[r][c]){state.grid[r][c]=null;updateCell(r,c);save();updateCounts();}
+    return;
+  }
+  const cur=state.grid[r][c];
+  if(click && cur && cur.type===state.tool){
+    cur.rot=(cur.rot+90)%360; updateCell(r,c); save(); suppress=true; return;
+  }
+  if(suppress)return;
+  state.grid[r][c]={type:state.tool,rot:state.rot};
+  updateCell(r,c); save(); updateCounts();
+}
+gridEl.addEventListener('pointerdown',e=>{
+  const cell=e.target.closest('.cell');if(!cell)return;
+  if(e.button===2)return; // right-click handled below
+  dragging=true; suppress=false;
+  const r=+cell.dataset.r,c=+cell.dataset.c; last=r+','+c;
+  paint(r,c,true);
+});
+gridEl.addEventListener('pointerover',e=>{
+  if(!dragging)return;
+  const cell=e.target.closest('.cell');if(!cell)return;
+  const key=cell.dataset.r+','+cell.dataset.c;
+  if(key===last)return; last=key;
+  paint(+cell.dataset.r,+cell.dataset.c,false);
+});
+window.addEventListener('pointerup',()=>{dragging=false;suppress=false;last=null;});
+gridEl.addEventListener('contextmenu',e=>{
+  const cell=e.target.closest('.cell');if(!cell)return;
+  e.preventDefault();
+  const r=+cell.dataset.r,c=+cell.dataset.c;
+  if(state.grid[r][c]){state.grid[r][c]=null;updateCell(r,c);save();updateCounts();}
+});
+
+/* ---------- controls ---------- */
+function bindNum(id,key){
+  const el=document.getElementById(id);el.value=state[key];
+  el.addEventListener('change',()=>{
+    const v=Math.max(1,Math.round(+el.value||1));el.value=v;state[key]=v;
+    resize();render();save();
+  });
+}
+bindNum('w','w');bindNum('h','h');bindNum('t','t');
+
+document.getElementById('zoom').value=state.cell;
+document.getElementById('zoom').addEventListener('input',e=>{state.cell=+e.target.value;render();save();});
+document.getElementById('rotbtn').onclick=rotate;
+function rotate(){state.rot=(state.rot+90)%360;updateRotPrev();save();}
+document.getElementById('clear').onclick=()=>{
+  if(!confirm('Clear all placed tiles?'))return;
+  state.grid=state.grid.map(row=>row.map(()=>null));render();save();
+};
+document.getElementById('print').onclick=()=>window.print();
+
+window.addEventListener('keydown',e=>{
+  if(/input|textarea/i.test(e.target.tagName))return;
+  if(e.key==='r'||e.key==='R')rotate();
+  else if(e.key==='e'||e.key==='E')selectTool('erase');
+  else if(['1','2','3','4'].includes(e.key))selectTool(TYPES[+e.key-1].id);
+});
+
+/* ---------- boot ---------- */
+load();
+buildPalette();
+selectTool(state.tool);
+resize();
+render();
+</script>
+</body>
+</html>
