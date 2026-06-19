@@ -116,6 +116,20 @@
     main{overflow:visible;padding:0}
     body{height:auto}
   }
+  /* ---- Phone / narrow ---- */
+  @media (max-width:760px){
+    body{height:auto;overflow:visible}
+    header{position:sticky;top:0;z-index:5}
+    header h1{font-size:15px}
+    .layout{flex-direction:column;flex:0 0 auto}
+    aside{flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--line);
+      overflow:visible;padding:16px}
+    .group{margin-bottom:16px}
+    .palette{grid-template-columns:repeat(4,1fr)}
+    .swatch .lbl{font-size:10.5px}
+    main{overflow:visible;padding:16px;justify-content:flex-start}
+    .cell{touch-action:manipulation}
+  }
 </style>
 </head>
 <body>
@@ -325,7 +339,7 @@ function updateRotPrev(){
 }
 
 /* ---------- painting ---------- */
-let dragging=false, suppress=false, last=null;
+let dragging=false, suppress=false, last=null, down=null;
 function paint(r,c,click){
   if(r<0||c<0||r>=rows||c>=cols)return;
   if(state.tool==='erase'){
@@ -343,18 +357,27 @@ function paint(r,c,click){
 gridEl.addEventListener('pointerdown',e=>{
   const cell=e.target.closest('.cell');if(!cell)return;
   if(e.button===2)return; // right-click handled below
-  dragging=true; suppress=false;
-  const r=+cell.dataset.r,c=+cell.dataset.c; last=r+','+c;
-  paint(r,c,true);
+  const r=+cell.dataset.r,c=+cell.dataset.c;
+  down={x:e.clientX,y:e.clientY,r,c,type:e.pointerType};
+  if(e.pointerType==='mouse'){          // mouse: place now, enable drag-paint
+    dragging=true; suppress=false; last=r+','+c;
+    paint(r,c,true);
+  }
+  // touch/pen: decide on pointerup so a swipe can scroll instead of painting
 });
 gridEl.addEventListener('pointerover',e=>{
-  if(!dragging)return;
+  if(!dragging)return;                   // mouse drag only
   const cell=e.target.closest('.cell');if(!cell)return;
   const key=cell.dataset.r+','+cell.dataset.c;
   if(key===last)return; last=key;
   paint(+cell.dataset.r,+cell.dataset.c,false);
 });
-window.addEventListener('pointerup',()=>{dragging=false;suppress=false;last=null;});
+window.addEventListener('pointerup',e=>{
+  if(down && down.type!=='mouse'){       // touch tap = place/rotate; swipe = scroll
+    if(Math.abs(e.clientX-down.x)<10 && Math.abs(e.clientY-down.y)<10) paint(down.r,down.c,true);
+  }
+  dragging=false; suppress=false; last=null; down=null;
+});
 gridEl.addEventListener('contextmenu',e=>{
   const cell=e.target.closest('.cell');if(!cell)return;
   e.preventDefault();
