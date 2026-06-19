@@ -18,7 +18,11 @@
     --shadow:0 1px 2px rgba(40,34,26,.06),0 6px 18px rgba(40,34,26,.06);
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
+  /* manipulation = keep scroll + pinch-zoom, block double-tap-to-zoom.
+     Applied on every viewport (incl. iPad, which is wider than the phone
+     breakpoint) since that gesture fights tap-to-place / tap-to-rotate. */
+  html,body{margin:0;height:100%;touch-action:manipulation}
+  .gridwrap,.cell,.tile,.tilesvg,.swatch,.btn,.seg button,.field input,#rotprev{touch-action:manipulation}
   body{
     font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     color:var(--ink);background:var(--bg);
@@ -32,6 +36,7 @@
   header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em}
   header .sub{color:var(--muted);font-size:12.5px}
   header .share{margin-left:auto}
+  header .clearm{display:none}
   .layout{display:flex;flex:1 1 auto;min-height:0}
 
   /* ---- Sidebar ---- */
@@ -127,45 +132,50 @@
     main{overflow:visible;padding:0}
     body{height:auto}
   }
-  /* ---- Phone / narrow ---- */
+  /* ---- Phone / narrow: a static app shell (no page scroll) ----
+     header · fixed size+finish strip · scrolling canvas · bottom toolbar.
+     Each is a flex row of .layout, so nothing ever overlaps or hides. */
   @media (max-width:760px){
-    /* touch-action:manipulation kills the double-tap-to-zoom (and the 300ms
-       tap delay) while still allowing pinch-zoom of the plan */
     html{overflow-x:hidden}
-    body{height:auto;overflow:visible;touch-action:manipulation}
-    header{position:sticky;top:0;z-index:30}
+    body{height:100vh;height:100dvh;overflow:hidden}
+    header{flex:0 0 auto}
     header h1{font-size:15px}
     header .sub{display:none}
-    .layout{flex-direction:column;flex:0 0 auto}
+    header .clearm{display:inline-flex;margin-left:auto}
+    header .share{margin-left:8px}
 
-    /* canvas first, right under the header; room to clear the fixed tool bar */
-    main{order:-1;overflow-x:auto;padding:14px 14px 152px;justify-content:flex-start}
-    .cell{touch-action:manipulation}
+    .layout{flex:1 1 auto;min-height:0;flex-direction:column}
+    aside{display:contents}            /* groups become flex rows of .layout */
 
-    /* settings sit above the canvas, compact; rarely-touched bits hidden */
-    aside{flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--line);
-      overflow:visible;padding:14px 14px 4px}
-    .group{margin-bottom:14px}
+    /* top strip — size + finish, always reachable */
+    #g-space,#g-finish{order:0;flex:0 0 auto;width:100%;margin:0;background:var(--panel);padding:10px 14px}
+    #g-space{display:flex;gap:10px;align-items:flex-end;padding-bottom:8px}
+    #g-space h2{display:none}
+    #g-space .field{flex:1;flex-direction:column;align-items:stretch;gap:3px;margin:0}
+    #g-space .field label{font-size:11px}
+    #g-space .field input[type=number]{width:100%;font-size:16px;text-align:left}
+    #g-finish{padding-top:0;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    #g-finish h2{margin:0 0 6px}
+
+    /* canvas — the only scrolling region */
+    main{order:1;flex:1 1 auto;min-height:0;overflow:auto;padding:16px;justify-content:flex-start}
     #g-view,#g-counts,#g-tips{display:none}
-    /* 16px inputs so iOS doesn't zoom the page when a field is focused */
-    .field input[type=number]{font-size:16px;width:96px}
 
-    /* Tiles + rotate + zoom pinned to the bottom — change tiles without scrolling */
-    #g-tiles{
-      position:fixed;left:0;right:0;bottom:0;width:100%;z-index:40;margin:0;
-      background:var(--panel);border-top:1px solid var(--line);
+    /* bottom toolbar — palette + rotate + zoom, a plain flex row (no overlap) */
+    #g-tiles{order:2;flex:0 0 auto;width:100%;margin:0;background:var(--panel);
+      border-top:1px solid var(--line);
       padding:9px 10px calc(9px + env(safe-area-inset-bottom));
-      box-shadow:0 -5px 20px rgba(40,34,26,.12);
-    }
+      box-shadow:0 -5px 20px rgba(40,34,26,.10)}
     #g-tiles h2{display:none}
-    /* flex (basis 0 + min-width 0) keeps the 5 swatches equal and never lets the
-       inline SVG thumbs blow out the bar's width */
+    /* flex (basis 0 + min-width 0) keeps the 5 swatches equal and stops the
+       inline-SVG thumbs from blowing out the bar width */
     #g-tiles .palette{display:flex;gap:7px}
     #g-tiles .swatch{flex:1 1 0;min-width:0;overflow:hidden;padding:5px;border-radius:9px;gap:3px}
     #g-tiles .swatch .thumb{width:40px;max-width:100%;margin:0 auto}
     #g-tiles .swatch .lbl{font-size:9.5px}
     #g-tiles .rotrow{margin-top:9px;gap:10px}
-    #g-tiles .rotprev{width:38px;height:38px}
+    #g-tiles .rotprev{width:38px;height:38px;flex:0 0 auto}
+    #g-tiles .rotmeta{flex:0 0 auto}
     #g-tiles .rotmeta .hint{display:none}
     #g-tiles #rotbtn{padding:10px 16px}
     .barzoom{display:flex;flex:1;align-items:center;gap:9px}
@@ -178,6 +188,7 @@
 <header>
   <h1>Tile Planner</h1>
   <span class="sub">Tap to place · tap again to rotate · drag to paint</span>
+  <button class="btn clearm" id="clearTop">Clear</button>
   <button class="btn primary share" id="share">Share PNG</button>
 </header>
 
@@ -476,6 +487,15 @@ gridEl.addEventListener('contextmenu',e=>{
   const r=+cell.dataset.r,c=+cell.dataset.c;
   if(state.grid[r][c]){state.grid[r][c]=null;updateCell(r,c);save();updateCounts();}
 });
+// Hard stop on iOS double-tap-to-zoom over the canvas (Safari/iPad don't always
+// honour touch-action for it). Pointer events still fire, so tap-to-place and
+// tap-again-to-rotate keep working — only the browser's zoom gesture is killed.
+let lastTouchEnd=0;
+gridEl.addEventListener('touchend',e=>{
+  const now=Date.now();
+  if(now-lastTouchEnd<=350) e.preventDefault();
+  lastTouchEnd=now;
+},{passive:false});
 
 /* ---------- controls ---------- */
 function bindNum(id,key){
@@ -499,10 +519,12 @@ function setZoom(v){
 });
 document.getElementById('rotbtn').onclick=rotate;
 function rotate(){state.rot=(state.rot+90)%360;updateRotPrev();save();}
-document.getElementById('clear').onclick=()=>{
+function clearAll(){
   if(!confirm('Clear all placed tiles?'))return;
   state.grid=state.grid.map(row=>row.map(()=>null));render();save();
-};
+}
+document.getElementById('clear').onclick=clearAll;
+document.getElementById('clearTop').onclick=clearAll;
 document.getElementById('print').onclick=()=>window.print();
 
 /* ---------- PNG export / share ---------- */
