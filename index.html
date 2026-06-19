@@ -66,6 +66,15 @@
   .swatch.erase .thumb{display:flex;align-items:center;justify-content:center;
     background:repeating-linear-gradient(45deg,#f4ede3 0 6px,#fff 6px 12px);color:var(--muted);font-size:18px}
 
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;font:inherit;font-size:12.5px;padding:8px 4px;border:0;
+    border-right:1px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)}
+  .seg button:last-child{border-right:0}
+  .seg button:hover{background:#fbfaf7}
+  .seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .seg .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;
+    vertical-align:-1px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.22)}
+
   .rotrow{display:flex;align-items:center;gap:10px;margin-top:6px}
   .rotprev{width:46px;height:46px;border-radius:7px;overflow:hidden;flex:0 0 auto;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);transition:transform .15s}
@@ -148,6 +157,15 @@
     </div>
 
     <div class="group">
+      <h2>Finish</h2>
+      <div class="seg" id="finish">
+        <button data-f="black"><span class="dot" style="background:#3a3d3f"></span>Black</button>
+        <button data-f="silver"><span class="dot" style="background:#c4c9cd"></span>Silver</button>
+        <button data-f="copper"><span class="dot" style="background:#c07d44"></span>Copper</button>
+      </div>
+    </div>
+
+    <div class="group">
       <h2>Tiles</h2>
       <div class="palette" id="palette"></div>
       <div class="rotrow">
@@ -212,32 +230,56 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a
 const PRNG = mulberry32(20260618);
 const DOTS = Array.from({length:78},()=>({
   x:PRNG()*100, y:PRNG()*100, r:1.3+PRNG()*1.5,
-  c:['#c6bca5','#8e856f','#b3a88f','#9b9079'][Math.floor(PRNG()*4)]
+  ci:Math.floor(PRNG()*4)
 }));
 function pebble(){
-  return DOTS.map(d=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${d.r.toFixed(2)}" fill="${d.c}"/>`).join('');
+  const dc=P().dots;
+  return DOTS.map(d=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${d.r.toFixed(2)}" fill="${dc[d.ci]}"/>`).join('');
+}
+
+/* ---------- finishes ---------- */
+const PALETTES = {
+  silver:{
+    flute:[[0,'#62676b'],[0.14,'#8b9094'],[0.34,'#c4c9cd'],[0.5,'#e6eaed'],[0.66,'#c4c9cd'],[0.86,'#8b9094'],[1,'#62676b']],
+    groove:'#7e8388', pebbleBase:'#93999d', dots:['#bcc1c5','#787d82','#a3a8ac','#868b90'],
+    arcLight:'#d2d7db', arcDark:'#6b7075', chip:'#c4c9cd'
+  },
+  black:{
+    flute:[[0,'#141516'],[0.14,'#2f3133'],[0.34,'#54585b'],[0.5,'#6d7074'],[0.66,'#54585b'],[0.86,'#2f3133'],[1,'#141516']],
+    groove:'#1f2123', pebbleBase:'#2b2d2f', dots:['#46494c','#1d1f21','#383b3d','#242628'],
+    arcLight:'#5c6064', arcDark:'#131415', chip:'#3a3d3f'
+  },
+  copper:{
+    flute:[[0,'#4f2c14'],[0.14,'#884c25'],[0.34,'#c07d44'],[0.5,'#ecaa6b'],[0.66,'#c07d44'],[0.86,'#884c25'],[1,'#4f2c14']],
+    groove:'#6f3e1f', pebbleBase:'#94572f', dots:['#c4884f','#6f3d1e','#a8693a','#5a3115'],
+    arcLight:'#dd9c61', arcDark:'#5d3318', chip:'#c07d44'
+  }
+};
+function P(){ return PALETTES[state.finish] || PALETTES.silver; }
+function applyFlute(){
+  document.getElementById('flute').innerHTML =
+    P().flute.map(([o,c])=>`<stop offset="${o}" stop-color="${c}"/>`).join('');
 }
 const FLUTES = (n=8)=>{const w=100/n;let s='';for(let i=0;i<n;i++)s+=`<rect x="${(i*w).toFixed(2)}" y="-30" width="${w.toFixed(2)}" height="160" fill="url(#flute)"/>`;return s;}
 
 function svg(inner){return `<svg class="tilesvg" viewBox="0 0 100 100" preserveAspectRatio="none">${inner}</svg>`;}
 
 const ART = {
-  straight: ()=> svg(`<rect width="100" height="100" fill="#9a907a"/>${FLUTES(8)}`),
-  angled:   ()=> svg(`<rect width="100" height="100" fill="#9a907a"/>
+  straight: ()=> svg(`<rect width="100" height="100" fill="${P().groove}"/>${FLUTES(8)}`),
+  angled:   ()=> svg(`<rect width="100" height="100" fill="${P().groove}"/>
       <g transform="rotate(45 50 50)">${FLUTES(11)}</g>`),
   curved:   ()=> {
       let arcs='';
       for(let r=30;r<=152;r+=9){
-        arcs+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="#d4cbb7" stroke-width="4.2"/>`;
-        arcs+=`<circle cx="0" cy="0" r="${r-4.5}" fill="none" stroke="#8b8068" stroke-width="1.4"/>`;
+        arcs+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().arcLight}" stroke-width="4.2"/>`;
+        arcs+=`<circle cx="0" cy="0" r="${r-4.5}" fill="none" stroke="${P().arcDark}" stroke-width="1.4"/>`;
       }
-      return svg(`<rect width="100" height="100" fill="#9a907a"/>
-        <clipPath id="cap${Math.floor(PRNG()*1e6)}"><rect width="100" height="100"/></clipPath>
+      return svg(`<rect width="100" height="100" fill="${P().groove}"/>
         <g>${arcs}</g>
         <clipPath id="corner"><path d="M0 0 H30 A30 30 0 0 1 0 30 Z"/></clipPath>
-        <g clip-path="url(#corner)"><rect width="40" height="40" fill="#ada389"/>${pebble()}</g>`);
+        <g clip-path="url(#corner)"><rect width="40" height="40" fill="${P().pebbleBase}"/>${pebble()}</g>`);
     },
-  filler:   ()=> svg(`<rect width="100" height="100" fill="#ada389"/>${pebble()}`),
+  filler:   ()=> svg(`<rect width="100" height="100" fill="${P().pebbleBase}"/>${pebble()}`),
 };
 const TYPES = [
   {id:'straight', name:'Straight'},
@@ -248,7 +290,7 @@ const TYPES = [
 
 /* ---------- state ---------- */
 const LS='tile-planner-v1';
-const state = { tool:'straight', rot:0, cell:58, w:144, h:423, t:24, grid:[] };
+const state = { tool:'straight', rot:0, cell:58, w:144, h:423, t:24, finish:'silver', grid:[] };
 let cols=0, rows=0;
 
 function load(){
@@ -330,6 +372,11 @@ function selectTool(tool){
   state.tool=tool; save();
   document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('sel',s.dataset.tool===tool));
   updateRotPrev();
+}
+function setFinish(f){
+  state.finish=f; applyFlute();
+  document.querySelectorAll('#finish button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+  buildPalette(); selectTool(state.tool); render(); save();
 }
 function updateRotPrev(){
   const el=document.getElementById('rotprev');
@@ -414,10 +461,9 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- boot ---------- */
 load();
-buildPalette();
-selectTool(state.tool);
 resize();
-render();
+document.querySelectorAll('#finish button').forEach(b=>b.onclick=()=>setFinish(b.dataset.f));
+setFinish(state.finish);   // applies palette + builds palette + selects tool + renders
 </script>
 </body>
 </html>
