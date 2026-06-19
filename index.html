@@ -487,15 +487,31 @@ gridEl.addEventListener('contextmenu',e=>{
   const r=+cell.dataset.r,c=+cell.dataset.c;
   if(state.grid[r][c]){state.grid[r][c]=null;updateCell(r,c);save();updateCounts();}
 });
-// Hard stop on iOS double-tap-to-zoom over the canvas (Safari/iPad don't always
-// honour touch-action for it). Pointer events still fire, so tap-to-place and
-// tap-again-to-rotate keep working — only the browser's zoom gesture is killed.
-let lastTouchEnd=0;
-gridEl.addEventListener('touchend',e=>{
-  const now=Date.now();
-  if(now-lastTouchEnd<=350) e.preventDefault();
-  lastTouchEnd=now;
-},{passive:false});
+/* ---------- kill iOS double-tap-to-zoom ----------
+   Safari/iPad don't reliably honour touch-action for this gesture, so guard it
+   at the document level: cancel the default on any genuine quick second tap.
+   - Real controls (buttons/inputs/swatches) are skipped, so their taps/clicks
+     and rapid presses still work.
+   - Only fires for taps that barely move, so swipe-scrolling and pinch are
+     untouched. The canvas places/rotates via pointer events (which fire before
+     touchend), so it keeps working — only the browser zoom is suppressed. */
+(function(){
+  let lastTap=0, start=null;
+  const CONTROL='button,input,select,textarea,a,label,.swatch,.seg,.barzoom';
+  document.addEventListener('touchstart',e=>{
+    start = e.touches.length===1 ? {x:e.touches[0].clientX,y:e.touches[0].clientY} : null;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(e.target.closest && e.target.closest(CONTROL)){ start=null; return; }
+    const t=e.changedTouches[0];
+    const moved = !start || Math.abs(t.clientX-start.x)>10 || Math.abs(t.clientY-start.y)>10;
+    start=null;
+    if(moved) return;
+    const now=Date.now();
+    if(now-lastTap<=350) e.preventDefault();   // second quick tap → no zoom
+    lastTap=now;
+  },{passive:false});
+})();
 
 /* ---------- controls ---------- */
 function bindNum(id,key){
