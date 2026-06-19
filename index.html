@@ -25,12 +25,13 @@
     display:flex;flex-direction:column;height:100vh;overflow:hidden;
   }
   header{
-    display:flex;align-items:baseline;gap:14px;
+    display:flex;align-items:center;gap:14px;
     padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);
     flex:0 0 auto;
   }
   header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em}
   header .sub{color:var(--muted);font-size:12.5px}
+  header .share{margin-left:auto}
   .layout{display:flex;flex:1 1 auto;min-height:0}
 
   /* ---- Sidebar ---- */
@@ -78,6 +79,7 @@
   .rotrow{display:flex;align-items:center;gap:10px;margin-top:6px}
   .rotprev{width:46px;height:46px;border-radius:7px;overflow:hidden;flex:0 0 auto;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);transition:transform .15s}
+  .barzoom{display:none}
   .btn{
     font:inherit;font-size:12.5px;padding:7px 11px;border:1px solid var(--line);
     border-radius:8px;background:#fff;cursor:pointer;color:var(--ink);
@@ -127,36 +129,68 @@
   }
   /* ---- Phone / narrow ---- */
   @media (max-width:760px){
-    body{height:auto;overflow:visible}
-    header{position:sticky;top:0;z-index:5}
+    /* touch-action:manipulation kills the double-tap-to-zoom (and the 300ms
+       tap delay) while still allowing pinch-zoom of the plan */
+    html{overflow-x:hidden}
+    body{height:auto;overflow:visible;touch-action:manipulation}
+    header{position:sticky;top:0;z-index:30}
     header h1{font-size:15px}
+    header .sub{display:none}
     .layout{flex-direction:column;flex:0 0 auto}
-    aside{flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--line);
-      overflow:visible;padding:16px}
-    .group{margin-bottom:16px}
-    .palette{grid-template-columns:repeat(4,1fr)}
-    .swatch .lbl{font-size:10.5px}
-    main{overflow:visible;padding:16px;justify-content:flex-start}
+
+    /* canvas first, right under the header; room to clear the fixed tool bar */
+    main{order:-1;overflow-x:auto;padding:14px 14px 152px;justify-content:flex-start}
     .cell{touch-action:manipulation}
+
+    /* settings sit above the canvas, compact; rarely-touched bits hidden */
+    aside{flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--line);
+      overflow:visible;padding:14px 14px 4px}
+    .group{margin-bottom:14px}
+    #g-view,#g-counts,#g-tips{display:none}
+    /* 16px inputs so iOS doesn't zoom the page when a field is focused */
+    .field input[type=number]{font-size:16px;width:96px}
+
+    /* Tiles + rotate + zoom pinned to the bottom — change tiles without scrolling */
+    #g-tiles{
+      position:fixed;left:0;right:0;bottom:0;width:100%;z-index:40;margin:0;
+      background:var(--panel);border-top:1px solid var(--line);
+      padding:9px 10px calc(9px + env(safe-area-inset-bottom));
+      box-shadow:0 -5px 20px rgba(40,34,26,.12);
+    }
+    #g-tiles h2{display:none}
+    /* flex (basis 0 + min-width 0) keeps the 5 swatches equal and never lets the
+       inline SVG thumbs blow out the bar's width */
+    #g-tiles .palette{display:flex;gap:7px}
+    #g-tiles .swatch{flex:1 1 0;min-width:0;overflow:hidden;padding:5px;border-radius:9px;gap:3px}
+    #g-tiles .swatch .thumb{width:40px;max-width:100%;margin:0 auto}
+    #g-tiles .swatch .lbl{font-size:9.5px}
+    #g-tiles .rotrow{margin-top:9px;gap:10px}
+    #g-tiles .rotprev{width:38px;height:38px}
+    #g-tiles .rotmeta .hint{display:none}
+    #g-tiles #rotbtn{padding:10px 16px}
+    .barzoom{display:flex;flex:1;align-items:center;gap:9px}
+    .barzoom .zlbl{color:var(--muted);font-size:15px;flex:0 0 auto}
+    .barzoom input[type=range]{flex:1;width:auto;min-width:0}
   }
 </style>
 </head>
 <body>
 <header>
   <h1>Tile Planner</h1>
-  <span class="sub">24″ tiles · click to place, click again to rotate</span>
+  <span class="sub">Tap to place · tap again to rotate · drag to paint</span>
+  <button class="btn primary share" id="share">Share PNG</button>
 </header>
 
 <div class="layout">
   <aside>
-    <div class="group">
+    <div class="group" id="g-space">
       <h2>Space</h2>
       <div class="field"><label>Width (in)</label><input id="w" type="number" min="1" step="1" value="144"></div>
       <div class="field"><label>Height (in)</label><input id="h" type="number" min="1" step="1" value="423"></div>
       <div class="field"><label>Tile size (in)</label><input id="t" type="number" min="1" step="1" value="24"></div>
     </div>
 
-    <div class="group">
+    <div class="group" id="g-finish">
       <h2>Finish</h2>
       <div class="seg" id="finish">
         <button data-f="black"><span class="dot" style="background:#3a3d3f"></span>Black</button>
@@ -165,33 +199,39 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="g-tiles">
       <h2>Tiles</h2>
       <div class="palette" id="palette"></div>
       <div class="rotrow">
         <div class="rotprev" id="rotprev"></div>
-        <div>
+        <div class="rotmeta">
           <button class="btn" id="rotbtn">Rotate ↻</button>
           <div class="hint" style="margin-top:4px">New tiles · <kbd>R</kbd></div>
+        </div>
+        <div class="barzoom">
+          <span class="zlbl">−</span>
+          <input id="zoom2" type="range" min="28" max="110">
+          <span class="zlbl">+</span>
         </div>
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="g-view">
       <h2>View</h2>
-      <div class="field"><label>Zoom</label><input id="zoom" type="range" min="28" max="96" value="58" style="width:120px"></div>
+      <div class="field"><label>Zoom</label><input id="zoom" type="range" min="28" max="110" value="58" style="width:120px"></div>
       <div class="btnrow">
         <button class="btn block" id="clear">Clear</button>
+        <button class="btn block" id="savepng">Save PNG</button>
         <button class="btn block" id="print">Print</button>
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="g-counts">
       <h2>Counts</h2>
       <div class="counts" id="counts"></div>
     </div>
 
-    <div class="group">
+    <div class="group" id="g-tips">
       <h2>Tips</h2>
       <div class="hint">
         <kbd>1</kbd>–<kbd>4</kbd> pick tile · <kbd>E</kbd> erase · <kbd>R</kbd> rotate.<br>
@@ -273,11 +313,18 @@ function diag(){
   return g;
 }
 
+// inner SVG markup per tile (reused both on-screen and by the PNG composer)
+const ARTINNER = {
+  straight: ()=> field()+vlines(),
+  curved:   ()=> field()+arcs()+stipple(STIP_CORNER),
+  angled:   ()=> field()+diag(),
+  filler:   ()=> field()+stipple(STIP),
+};
 const ART = {
-  straight: ()=> svg(field()+vlines()),
-  curved:   ()=> svg(field()+arcs()+stipple(STIP_CORNER)),
-  angled:   ()=> svg(field()+diag()),
-  filler:   ()=> svg(field()+stipple(STIP)),
+  straight: ()=> svg(ARTINNER.straight()),
+  curved:   ()=> svg(ARTINNER.curved()),
+  angled:   ()=> svg(ARTINNER.angled()),
+  filler:   ()=> svg(ARTINNER.filler()),
 };
 const TYPES = [
   {id:'straight', name:'Straight'},
@@ -440,8 +487,16 @@ function bindNum(id,key){
 }
 bindNum('w','w');bindNum('h','h');bindNum('t','t');
 
-document.getElementById('zoom').value=state.cell;
-document.getElementById('zoom').addEventListener('input',e=>{state.cell=+e.target.value;render();save();});
+function setZoom(v){
+  state.cell=Math.round(+v)||state.cell;
+  ['zoom','zoom2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=state.cell;});
+  render(); save();
+}
+['zoom','zoom2'].forEach(id=>{
+  const el=document.getElementById(id); if(!el)return;
+  el.value=state.cell;
+  el.addEventListener('input',e=>setZoom(e.target.value));
+});
 document.getElementById('rotbtn').onclick=rotate;
 function rotate(){state.rot=(state.rot+90)%360;updateRotPrev();save();}
 document.getElementById('clear').onclick=()=>{
@@ -449,6 +504,69 @@ document.getElementById('clear').onclick=()=>{
   state.grid=state.grid.map(row=>row.map(()=>null));render();save();
 };
 document.getElementById('print').onclick=()=>window.print();
+
+/* ---------- PNG export / share ---------- */
+// Compose the whole plan as one SVG (tiles + room outline + dimensions),
+// then rasterise to a PNG so it shares/saves cleanly.
+function planSVG(){
+  const TS=Math.max(56,Math.min(120,Math.floor(2400/Math.max(cols,rows))));
+  const gW=cols*TS, gH=rows*TS;
+  const M=Math.round(TS*0.5), TOP=Math.round(TS*0.8);
+  const W=gW+M*2, H=gH+TOP+M;
+  const scale=TS/state.t, spW=state.w*scale, spH=state.h*scale;
+  const fin=state.finish[0].toUpperCase()+state.finish.slice(1);
+  const fs=Math.round(TS*0.26), accent='#9a6a3a';
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">`;
+  s+=`<rect width="${W}" height="${H}" fill="#f3f1ec"/>`;
+  s+=`<text x="${M}" y="${Math.round(TOP*0.6)}" font-size="${Math.round(TS*0.3)}" font-weight="600" fill="#2b2722">Tile Plan · ${fin} · ${state.w}″ × ${state.h}″</text>`;
+  s+=`<rect x="${M}" y="${TOP}" width="${gW}" height="${gH}" fill="#ffffff"/>`;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const t=state.grid[r][c]; if(!t)continue;
+    s+=`<svg x="${M+c*TS}" y="${TOP+r*TS}" width="${TS}" height="${TS}" viewBox="0 0 100 100" preserveAspectRatio="none"><g transform="rotate(${t.rot} 50 50)">${ARTINNER[t.type]()}</g></svg>`;
+  }
+  // tile seams (over everything, faint — matches the on-screen tile borders)
+  let lines='';
+  for(let c=0;c<=cols;c++) lines+=`<line x1="${M+c*TS}" y1="${TOP}" x2="${M+c*TS}" y2="${TOP+gH}"/>`;
+  for(let r=0;r<=rows;r++) lines+=`<line x1="${M}" y1="${TOP+r*TS}" x2="${M+gW}" y2="${TOP+r*TS}"/>`;
+  s+=`<g stroke="#000" stroke-opacity="0.10" stroke-width="1">${lines}</g>`;
+  // room outline + dimensions
+  s+=`<rect x="${M+1}" y="${TOP+1}" width="${spW-2}" height="${spH-2}" fill="none" stroke="${accent}" stroke-width="${Math.max(2,TS*0.022)}"/>`;
+  s+=`<text x="${M+spW/2}" y="${TOP+spH+fs*1.3}" font-size="${fs}" fill="${accent}" font-weight="600" text-anchor="middle">${state.w}″</text>`;
+  const hx=M+spW+fs*0.9, hy=TOP+spH/2;
+  s+=`<text x="${hx}" y="${hy}" font-size="${fs}" fill="${accent}" font-weight="600" text-anchor="middle" transform="rotate(90 ${hx} ${hy})">${state.h}″</text>`;
+  s+=`</svg>`;
+  return {svg:s,W,H};
+}
+function planBlob(){
+  const {svg,W,H}=planSVG();
+  const dpr=Math.max(W,H)>2000?1:2;
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const cv=document.createElement('canvas');
+      cv.width=W*dpr; cv.height=H*dpr;
+      const ctx=cv.getContext('2d');
+      ctx.scale(dpr,dpr); ctx.drawImage(img,0,0,W,H);
+      cv.toBlob(b=>b?res(b):rej(new Error('toBlob failed')),'image/png');
+    };
+    img.onerror=()=>rej(new Error('svg load failed'));
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  });
+}
+async function sharePNG(){
+  let blob; try{ blob=await planBlob(); }catch(e){ alert('Could not generate image.'); return; }
+  const file=new File([blob],'tile-plan.png',{type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'Tile Plan',text:`Tile plan — ${state.w}″ × ${state.h}″`}); return; }
+    catch(e){ if(e && e.name==='AbortError') return; }   // user cancelled
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='tile-plan.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+document.getElementById('share').onclick=sharePNG;
+document.getElementById('savepng').onclick=sharePNG;
 
 window.addEventListener('keydown',e=>{
   if(/input|textarea/i.test(e.target.tagName))return;
