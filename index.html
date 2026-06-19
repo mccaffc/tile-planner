@@ -212,32 +212,26 @@
 
 <script>
 /* ---------- tile artwork ---------- */
-// deterministic pebble field
+// fine, even stipple: a jittered grid of tiny uniform dots (matches the
+// reference's blank-tile texture — finer and more regular than scattered pebbles)
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const PRNG = mulberry32(20260618);
-const DOTS = Array.from({length:78},()=>({
-  x:PRNG()*100, y:PRNG()*100, r:1.3+PRNG()*1.5,
-  ci:Math.floor(PRNG()*4)
-}));
-function pebble(){
-  const dc=P().dots;
-  return DOTS.map(d=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${d.r.toFixed(2)}" fill="${dc[d.ci]}"/>`).join('');
+const STIP = (()=>{
+  const rnd=mulberry32(20260618), n=15, g=100/n, j=g*0.66, p=[];
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)
+    p.push({x:(c+0.5)*g+(rnd()-0.5)*j, y:(r+0.5)*g+(rnd()-0.5)*j});
+  return p;
+})();
+// dots farther than the arc radius — the leftover corner of a curved tile
+const STIP_CORNER = STIP.filter(d=>Math.hypot(d.x,d.y)>=100);
+function stipple(pts){
+  return pts.map(d=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="0.72" fill="${P().stip}"/>`).join('');
 }
 
 /* ---------- finishes ---------- */
 const PALETTES = {
-  silver:{
-    field:'#c6cbcf', ridge:'#e4e8eb', groove:'#5e6368',
-    pebbleBase:'#aab0b4', dots:['#bcc1c5','#878d92','#a3a8ac','#969b9f'], chip:'#c4c9cd'
-  },
-  black:{
-    field:'#3b3e40', ridge:'#62666a', groove:'#101113',
-    pebbleBase:'#303234', dots:['#4a4d50','#202224','#3a3d3f','#2a2c2e'], chip:'#3a3d3f'
-  },
-  copper:{
-    field:'#bd7a42', ridge:'#e6a96d', groove:'#4f2c14',
-    pebbleBase:'#a5683a', dots:['#cc8c52','#73401f','#b3743f','#5e3517'], chip:'#c07d44'
-  }
+  silver:{ field:'#c6cbcf', ridge:'#e4e8eb', groove:'#5e6368', stip:'#7b8086' },
+  black:{  field:'#3b3e40', ridge:'#62666a', groove:'#101113', stip:'#62666a' },
+  copper:{ field:'#bd7a42', ridge:'#e6a96d', groove:'#4f2c14', stip:'#6f4327' }
 };
 function P(){ return PALETTES[state.finish] || PALETTES.silver; }
 
@@ -262,11 +256,12 @@ function vlines(){
   return g;
 }
 // curved: concentric quarter-arcs centred on a corner; radii = the same offsets,
-// so an arc crosses each near edge where a flute would — 4 tiles meet as full circles
+// so an arc crosses each near edge where a flute would — 4 tiles meet as full
+// circles. Arcs stop at the tile radius (r=100); the leftover far corner is stippled.
 function arcs(){
   let g='';
-  for(let r=0;r<=151;r+=S)  g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().groove}" stroke-width="${GROOVE_W}"/>`;
-  for(let i=0;i<12;i++){const r=((i+0.5)*S).toFixed(3); g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().ridge}" stroke-width="${RIDGE_W}"/>`;}
+  for(let r=0;r<=100.001;r+=S) g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().groove}" stroke-width="${GROOVE_W}"/>`;
+  for(let i=0;i<8;i++){const r=((i+0.5)*S).toFixed(3); g+=`<circle cx="0" cy="0" r="${r}" fill="none" stroke="${P().ridge}" stroke-width="${RIDGE_W}"/>`;}
   return g;
 }
 // angled: 45° lines that cross every edge at the same offsets — flow into flutes and arcs alike
@@ -280,9 +275,9 @@ function diag(){
 
 const ART = {
   straight: ()=> svg(field()+vlines()),
-  curved:   ()=> svg(field()+arcs()),
+  curved:   ()=> svg(field()+arcs()+stipple(STIP_CORNER)),
   angled:   ()=> svg(field()+diag()),
-  filler:   ()=> svg(`<rect x="-3" y="-3" width="106" height="106" fill="${P().pebbleBase}"/>${pebble()}`),
+  filler:   ()=> svg(field()+stipple(STIP)),
 };
 const TYPES = [
   {id:'straight', name:'Straight'},
